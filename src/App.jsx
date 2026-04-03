@@ -72,7 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = ["Breakfast","Lunch","Dinner","Snack"];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.3";
+const APP_VERSION = "Beta build 0.1.4";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
