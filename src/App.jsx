@@ -72,7 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = ["Breakfast","Lunch","Dinner","Snack"];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.8";
+const APP_VERSION = "Beta build 0.1.9";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -380,18 +380,6 @@ export default function App() {
   }
 
   async function prepareImage(file) {
-    const toDataUrl = blob => new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = ev => resolve(ev.target.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
-    if (file.size <= 4.5 * 1024 * 1024) {
-      const dataUrl = await toDataUrl(file);
-      return { dataUrl, base64: dataUrl.split(",")[1] };
-    }
-
     const objectUrl = URL.createObjectURL(file);
     try {
       const img = await new Promise((resolve, reject) => {
@@ -401,22 +389,37 @@ export default function App() {
         el.src = objectUrl;
       });
 
-      const maxDim = 1600;
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      const width = Math.max(1, Math.round(img.width * scale));
-      const height = Math.max(1, Math.round(img.height * scale));
+      let maxDim = 1600;
+      let scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      let width = Math.max(1, Math.round(img.width * scale));
+      let height = Math.max(1, Math.round(img.height * scale));
       const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("canvas_unavailable");
-      ctx.drawImage(img, 0, 0, width, height);
 
       let quality = 0.82;
-      let dataUrl = canvas.toDataURL("image/jpeg", quality);
-      while (dataUrl.length * 0.75 > 4.5 * 1024 * 1024 && quality > 0.45) {
-        quality -= 0.08;
+      let dataUrl = "";
+      let estimatedBytes = Infinity;
+
+      while (estimatedBytes > 4.5 * 1024 * 1024) {
+        canvas.width = width;
+        canvas.height = height;
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
         dataUrl = canvas.toDataURL("image/jpeg", quality);
+        estimatedBytes = Math.ceil((dataUrl.length - "data:image/jpeg;base64,".length) * 0.75);
+
+        if (estimatedBytes <= 4.5 * 1024 * 1024) break;
+        if (quality > 0.5) {
+          quality = Math.max(0.5, quality - 0.08);
+        } else if (maxDim > 1100) {
+          maxDim -= 200;
+          scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          width = Math.max(1, Math.round(img.width * scale));
+          height = Math.max(1, Math.round(img.height * scale));
+        } else {
+          break;
+        }
       }
 
       return { dataUrl, base64: dataUrl.split(",")[1] };
