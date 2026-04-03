@@ -249,9 +249,7 @@ export default function App() {
   const [favorites, setFavoritesRaw] = useState(() => LS.get("nrx_favorites", []));
   const [badges, setBadgesRaw] = useState(() => LS.get("nrx_badges", []));
   const [streakData, setStreakDataRaw] = useState(() => LS.get("nrx_streak", { current:0, longest:0, lastDate:"" }));
-  const [suppList, setSuppListRaw] = useState(() => LS.get("nrx_supps", []));
   const [weightLog, setWeightLogRaw] = useState(() => LS.get("nrx_weights", []));
-  const [journal, setJournalRaw] = useState(() => LS.get("nrx_journal", []));
   const [daily, setDailyRaw] = useState(() => {
     const saved = LS.get("nrx_daily", null);
     if (saved && saved.date === todayKey()) return saved;
@@ -264,9 +262,7 @@ export default function App() {
   const setFavorites = v => { const next = typeof v === "function" ? v(favorites) : v; setFavoritesRaw(next); LS.set("nrx_favorites", next); };
   const setBadges = v => { const next = typeof v === "function" ? v(badges) : v; setBadgesRaw(next); LS.set("nrx_badges", next); };
   const setStreakData = v => { const next = typeof v === "function" ? v(streakData) : v; setStreakDataRaw(next); LS.set("nrx_streak", next); };
-  const setSuppList = v => { const next = typeof v === "function" ? v(suppList) : v; setSuppListRaw(next); LS.set("nrx_supps", next); };
   const setWeightLog = v => { const next = typeof v === "function" ? v(weightLog) : v; setWeightLogRaw(next); LS.set("nrx_weights", next); };
-  const setJournal = v => { const next = typeof v === "function" ? v(journal) : v; setJournalRaw(next); LS.set("nrx_journal", next); };
   const setDaily = v => { const next = typeof v === "function" ? v(daily) : v; setDailyRaw(next); LS.set("nrx_daily", next); };
 
   // Session state
@@ -282,14 +278,6 @@ export default function App() {
   const [imgData, setImgData] = useState(null);
   const [imgPrev, setImgPrev] = useState(null);
   const [expandedResult, setExpandedResult] = useState(null);
-  const [suppInput, setSuppInput] = useState("");
-  const [suppResult, setSuppResult] = useState(null);
-  const [suppTaken, setSuppTaken] = useState(() => LS.get("nrx_taken_"+todayKey(), {}));
-  const [suppQ, setSuppQ] = useState("");
-  const [suppQA, setSuppQA] = useState(null);
-  const [genQ, setGenQ] = useState("");
-  const [genA, setGenA] = useState(null);
-  const [je, setJe] = useState({ food:"", symptom:"", notes:"" });
   const [fiberPopup, setFiberPopup] = useState(false);
   const [editingFav, setEditingFav] = useState(null);
   const [favNameInput, setFavNameInput] = useState("");
@@ -300,13 +288,11 @@ export default function App() {
   const fRef = useRef();
   const recognitionRef = useRef(null);
 
-  // Midnight reset for daily log + supplement taken
+  // Midnight reset for daily log
   useEffect(() => {
     const ck = () => {
       if (daily.date !== todayKey()) {
         setDaily({ date: todayKey(), meals: [] });
-        setSuppTaken({});
-        LS.set("nrx_taken_"+todayKey(), {});
       }
     };
     ck(); const iv = setInterval(ck, 60000); return () => clearInterval(iv);
@@ -479,19 +465,7 @@ export default function App() {
     else { setFavorites(f => [...f, { name, displayName: name, result }]); }
   }
 
-  async function getSched() { if (!suppList.length) return; setLoading(true); const p = await apicall(`Optimize daily timing for: ${suppList.join(", ")}. Use Masterjohn as primary reference for micronutrients. Return supplement_timing JSON.`); if (p?.type==="client_error") setAnalyzeError(`Analysis failed: ${p.error}`); else setSuppResult(p); setLoading(false); }
-  async function askSupp() { if (!suppQ.trim()) return; setLoading(true); const ctx = suppList.length ? `Current supplements: ${suppList.join(", ")}.` : ""; const p = await apicall(`${suppQ}. ${ctx} Return supp_qa JSON.`); if (p?.type==="client_error") setAnalyzeError(`Analysis failed: ${p.error}`); else setSuppQA(p); setLoading(false); }
-  async function askGen() {
-    if (!genQ.trim()) return; setLoading(true);
-    const lc = `Today's logged meals: ${dailySummary()}. Totals: ${Math.round(tot.pro)}g protein, ${Math.round(tot.fib)}g fiber, ${Math.round(tot.cal)} cal.`;
-    const pc = `Profile: weight ${parseFloat(profile.weight)||0}lbs, goals: ${profile.goals.join(", ")}, activity: ${profile.activityLevel}.`;
-    const p = await apicall(`${genQ}. ${lc} ${pc} Return advice JSON.`);
-    if (p?.type==="client_error") setAnalyzeError(`Analysis failed: ${p.error}`);
-    else setGenA(p);
-    setLoading(false);
-  }
-
-  const nav = s => { setScreen(s); setAnalyzeError(null); setAnalyzeSuccess(null); setGenA(null); };
+  const nav = s => { setScreen(s); setAnalyzeError(null); setAnalyzeSuccess(null); };
 
   // ─── Onboarding ──────────────────────────────────────────────────────────
   const advancedGoals = profile.userMode === "Performance tracking" || profile.goals.some(g => /muscle|athletic|performance|lose|fat/i.test(g));
@@ -532,7 +506,7 @@ export default function App() {
     ...(advancedGoals ? [{ id:"trackingLevel", type:"single", q:"How closely do you want to track your nutrition?", opts:TRACKING_LEVELS }] : []),
     { id:"dietStyle", type:"single", q:"Which best matches how you eat right now?", opts:DIET },
     { id:"challenges", type:"multi", q:"What tends to get in your way most often?", opts:CHAL },
-    { id:"medications", type:"text", q: isConditionMode ? "Any medications, supplements, or health context you want the app to keep in mind? (optional)" : "Any medications or supplements? (optional - skip to finish)", ph:"e.g. Metformin, Ozempic, Vitamin D...", optional:true },
+    { id:"medications", type:"text", q: isConditionMode ? "Any health context you want the app to keep in mind? (optional)" : "Any health context you want the app to keep in mind? (optional)", ph:"e.g. blood sugar goals, appetite changes, digestion, protein focus...", optional:true },
   ];
   const cur = steps[step];
   const ok = () => {
@@ -545,7 +519,6 @@ export default function App() {
     return !!profile[cur.id];
   };
   const adv = () => {
-    if (cur.id==="medications" && profile.medications?.trim()) { const items = profile.medications.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean); if (items.length) setSuppList(items); }
     if (step < steps.length-1) setStep(s=>s+1);
     else {
       if (!advancedGoals) setProfile(p => ({...p, trackingLevel:"Basic — just protein & fiber"}));
@@ -629,7 +602,7 @@ export default function App() {
   );
 
   // ─── Main App UI ─────────────────────────────────────────────────────────
-  const SCREENS = [["home","Check Meal"],["tracker",isSimpleMode?"Progress":"Daily Totals"],["rewards","Rewards"],["supplements","Supplements"],["journal",wantsSymptoms?"Notes & Symptoms":"Journal"]];
+  const SCREENS = [["home","Meal Check"]];
 
   return (
     <div style={{ maxWidth:520, margin:"0 auto", padding:"1rem" }}>
@@ -643,8 +616,8 @@ export default function App() {
           {profile.name && <span style={{ fontSize:13, color:"var(--color-text-secondary)" }}>· {profile.name}</span>}
         </div>
         <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-          {streakData.current > 0 && <span style={{ fontSize:12, padding:"3px 9px", background:"#fef9c3", color:"#854d0e", borderRadius:20, fontWeight:500 }}>🔥 {streakData.current}</span>}
-          {badges.length > 0 && <span onClick={()=>nav("rewards")} style={{ fontSize:12, padding:"3px 9px", background:"#f0fdf4", color:"#166534", borderRadius:20, fontWeight:500, cursor:"pointer" }}>🏅 {badges.length}</span>}
+          {false && streakData.current > 0 && <span style={{ fontSize:12, padding:"3px 9px", background:"#fef9c3", color:"#854d0e", borderRadius:20, fontWeight:500 }}>🔥 {streakData.current}</span>}
+          {false && badges.length > 0 && <span onClick={()=>nav("rewards")} style={{ fontSize:12, padding:"3px 9px", background:"#f0fdf4", color:"#166534", borderRadius:20, fontWeight:500, cursor:"pointer" }}>🏅 {badges.length}</span>}
           <button onClick={()=>nav("profile")} style={{ background:"none", border:"none", cursor:"pointer", fontSize:17, color:"var(--color-text-secondary)", padding:4 }}>⚙</button>
         </div>
       </div>
@@ -760,7 +733,7 @@ export default function App() {
           </div>
 
           {/* Ask anything */}
-          <div style={{ background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", padding:"1rem", marginBottom:"1rem" }}>
+          {false && <div style={{ background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", padding:"1rem", marginBottom:"1rem" }}>
             <p style={{ margin:"0 0 8px", fontWeight:500, fontSize:14 }}>Ask anything</p>
             <textarea value={genQ} onChange={e=>setGenQ(e.target.value)} rows={2} placeholder="How did I do today? Why do I crash after lunch? Best high-protein snack?" style={{ width:"100%", fontSize:13, borderRadius:8, padding:"9px 12px", resize:"none", boxSizing:"border-box", fontFamily:"var(--font-sans)" }}/>
             <div style={{ display:"flex", gap:8, marginTop:8, alignItems:"center" }}>
@@ -768,7 +741,7 @@ export default function App() {
               {genA && <button onClick={()=>setGenA(null)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:"var(--color-text-tertiary)", padding:0 }}>clear</button>}
             </div>
             {genA && <div style={{ marginTop:10, padding:"10px 12px", background:"var(--color-background-secondary)", borderRadius:8 }}><p style={{ margin:"0 0 8px", fontSize:13, lineHeight:1.55 }}>{genA.answer}</p>{(genA.tips||[]).map((t,i) => <p key={i} style={{ margin:"3px 0", fontSize:12, color:"var(--color-text-secondary)" }}>• {t}</p>)}</div>}
-          </div>
+          </div>}
 
           {/* Favorites */}
           {favorites.length > 0 && (
@@ -842,7 +815,7 @@ export default function App() {
       )}
 
       {/* ── TRACKER ── */}
-      {screen==="tracker" && (
+      {false && screen==="tracker" && (
         <div>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
             <h3 style={{ fontWeight:500, fontSize:17, margin:0 }}>Daily totals</h3>
@@ -909,7 +882,7 @@ export default function App() {
       )}
 
       {/* ── REWARDS ── */}
-      {screen==="rewards" && (
+      {false && screen==="rewards" && (
         <div>
           <h3 style={{ fontWeight:500, fontSize:17, margin:"0 0 14px" }}>Rewards</h3>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:16 }}>
@@ -962,7 +935,7 @@ export default function App() {
       )}
 
       {/* ── SUPPLEMENTS ── */}
-      {screen==="supplements" && (
+      {false && screen==="supplements" && (
         <div>
           <h3 style={{ fontWeight:500, fontSize:17, margin:"0 0 8px" }}>Supplements & medications</h3>
           {suppList.length===0 ? (
@@ -1019,7 +992,7 @@ export default function App() {
       )}
 
       {/* ── JOURNAL ── */}
-      {screen==="journal" && (
+      {false && screen==="journal" && (
         <div>
           <h3 style={{ fontWeight:500, fontSize:17, margin:"0 0 8px" }}>How did you feel?</h3>
           <p style={{ fontSize:13, color:"var(--color-text-secondary)", marginBottom:12, lineHeight:1.5 }}>Log symptoms, energy, digestion, or performance notes. Over time this becomes your pattern-detection space.</p>
@@ -1073,7 +1046,7 @@ export default function App() {
           <div style={{ background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", padding:"1rem" }}>
             <p style={{ margin:"0 0 8px", fontWeight:500, fontSize:14 }}>Data</p>
             <p style={{ margin:"0 0 10px", fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.4 }}>Your data is stored locally in this browser. Clearing browser data will erase it. Export a backup anytime.</p>
-            <button onClick={()=>{ const data = { profile, history, favorites, badges, streakData, weightLog, journal }; const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="nourishrx_backup.json"; a.click(); }} style={{ padding:"9px 16px", borderRadius:10, background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", fontSize:13, cursor:"pointer", color:"var(--color-text-primary)" }}>Export data (JSON)</button>
+            <button onClick={()=>{ const data = { profile, history, favorites, badges, streakData, weightLog, daily }; const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="nourishrx_backup.json"; a.click(); }} style={{ padding:"9px 16px", borderRadius:10, background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", fontSize:13, cursor:"pointer", color:"var(--color-text-primary)" }}>Export data (JSON)</button>
           </div>
         </div>
       )}
