@@ -72,7 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = ["Breakfast","Lunch","Dinner","Snack"];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.6";
+const APP_VERSION = "Beta build 0.1.7";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -292,7 +292,6 @@ export default function App() {
   const recognitionRef = useRef(null);
   const voiceBaseRef = useRef("");
   const voiceFinalChunksRef = useRef([]);
-  const voiceInterimRef = useRef("");
 
   // Midnight reset for daily log
   useEffect(() => {
@@ -401,11 +400,10 @@ export default function App() {
     const rec = new SpeechRecognition();
     recognitionRef.current = rec;
     rec.lang = "en-US";
-    rec.interimResults = true;
+    rec.interimResults = false;
     rec.continuous = true;
     voiceBaseRef.current = query.trim();
     voiceFinalChunksRef.current = [];
-    voiceInterimRef.current = "";
     rec.onstart = () => {
       setCaptureMode("voice");
       setIsListening(true);
@@ -416,23 +414,20 @@ export default function App() {
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const text = event.results[i][0]?.transcript?.trim() || "";
         if (!text) continue;
-        if (event.results[i].isFinal) {
-          const chunks = voiceFinalChunksRef.current;
-          if (!chunks.length || chunks[chunks.length - 1] !== text) chunks.push(text);
-          voiceInterimRef.current = "";
-        } else {
-          voiceInterimRef.current = text;
-        }
+        const chunks = voiceFinalChunksRef.current;
+        if (!chunks.length || chunks[chunks.length - 1] !== text) chunks.push(text);
       }
-      const transcript = [...voiceFinalChunksRef.current, voiceInterimRef.current].filter(Boolean).join(" ").trim();
-      const base = voiceBaseRef.current;
-      setQuery(transcript ? `${base}${base ? "\n\n" : ""}${transcript}` : base);
     };
     rec.onerror = () => {
       setAnalyzeError("Voice capture was interrupted. You can try again or type a quick note.");
       setIsListening(false);
     };
-    rec.onend = () => setIsListening(false);
+    rec.onend = () => {
+      const transcript = voiceFinalChunksRef.current.join(" ").trim();
+      const base = voiceBaseRef.current;
+      setQuery(transcript ? `${base}${base ? "\n\n" : ""}${transcript}` : base);
+      setIsListening(false);
+    };
     rec.start();
   }
 
@@ -712,7 +707,7 @@ export default function App() {
               <button onClick={isListening ? stopVoiceCapture : startVoiceCapture} disabled={!voiceSupported} style={{ padding:"12px 10px", borderRadius:14, border:captureMode==="voice"?"1.5px solid #0ea5e9":"1px solid var(--color-border-secondary)", background:captureMode==="voice"?"#eff6ff":"#f8fafc", cursor:voiceSupported?"pointer":"default", textAlign:"left", opacity:voiceSupported?1:0.65 }}>
                 <p style={{ margin:"0 0 3px", fontSize:16 }}>{isListening ? "🎙️" : "🎤"}</p>
                 <p style={{ margin:"0 0 2px", fontSize:13, fontWeight:600 }}>{isListening ? "Stop" : "Voice"}</p>
-                <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)", lineHeight:1.35 }}>{voiceSupported ? (isListening ? "Tap again when you're done" : "Describe it out loud") : "Browser unsupported"}</p>
+                <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)", lineHeight:1.35 }}>{voiceSupported ? (isListening ? "Adds your note when you stop" : "Describe it out loud") : "Browser unsupported"}</p>
               </button>
             </div>
 
@@ -736,7 +731,7 @@ export default function App() {
                 </div>
               )}
               <p style={{ margin:"0 0 5px", fontSize:12, fontWeight:600, color:"var(--color-text-primary)" }}>Optional context</p>
-              <textarea value={query} onChange={e=>setQuery(e.target.value)} rows={3} placeholder={captureMode==="voice" ? "Voice transcript will appear here. You can keep talking until you tap stop." : `Add a detail about your ${activeMeal.toLowerCase()} if helpful...`} style={{ width:"100%", fontSize:14, borderRadius:8, padding:"9px 12px", resize:"none", boxSizing:"border-box", fontFamily:"var(--font-sans)", background:"#fff" }}/>
+              <textarea value={query} onChange={e=>setQuery(e.target.value)} rows={3} placeholder={captureMode==="voice" ? (isListening ? "Recording... your note will appear when you tap stop." : "Tap voice, speak naturally, then tap stop.") : `Add a detail about your ${activeMeal.toLowerCase()} if helpful...`} style={{ width:"100%", fontSize:14, borderRadius:8, padding:"9px 12px", resize:"none", boxSizing:"border-box", fontFamily:"var(--font-sans)", background:"#fff" }}/>
             </div>
             <div style={{ display:"flex", gap:8, marginBottom: showPortionNote?8:0 }}>
               <button onClick={analyze} disabled={loading||(!query.trim()&&!imgData)} style={{ flex:1, padding:"9px", borderRadius:10, background:loading||(!query.trim()&&!imgData)?"var(--color-background-secondary)":"#16a34a", color:loading||(!query.trim()&&!imgData)?"var(--color-text-secondary)":"#fff", border:"none", fontSize:14, fontWeight:500, cursor:"pointer" }}>
@@ -745,7 +740,7 @@ export default function App() {
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, marginBottom:showPortionNote?0:4 }}>
               <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)" }}>
-                {captureMode==="photo" ? (showPhotoOptions ? "Choose camera or photo library." : "Tap photo to choose camera or your photo library.") : (isListening ? "Recording stays open until you tap stop." : "Tap once to start talking, then tap again when you're done.")}
+                {captureMode==="photo" ? (showPhotoOptions ? "Choose camera or photo library." : "Tap photo to choose camera or your photo library.") : (isListening ? "Recording now. Your words are added once when you stop." : "Tap once to start talking, then tap again when you're done.")}
               </p>
             </div>
             <button onClick={()=>setShowPortionNote(s=>!s)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:11, color:"var(--color-text-tertiary)", padding:"4px 0", display:"block" }}>
