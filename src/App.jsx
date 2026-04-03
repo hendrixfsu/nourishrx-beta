@@ -291,7 +291,6 @@ export default function App() {
   const uploadRef = useRef();
   const recognitionRef = useRef(null);
   const voiceBaseRef = useRef("");
-  const voiceFinalRef = useRef("");
 
   // Midnight reset for daily log
   useEffect(() => {
@@ -403,7 +402,6 @@ export default function App() {
     rec.interimResults = true;
     rec.continuous = true;
     voiceBaseRef.current = query.trim();
-    voiceFinalRef.current = "";
     rec.onstart = () => {
       setCaptureMode("voice");
       setIsListening(true);
@@ -411,16 +409,11 @@ export default function App() {
       setShowPhotoOptions(false);
     };
     rec.onresult = event => {
-      let finalChunk = "";
-      let interimChunk = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const chunk = event.results[i][0]?.transcript?.trim();
-        if (!chunk) continue;
-        if (event.results[i].isFinal) finalChunk = `${finalChunk} ${chunk}`.trim();
-        else interimChunk = `${interimChunk} ${chunk}`.trim();
-      }
-      if (finalChunk) voiceFinalRef.current = `${voiceFinalRef.current} ${finalChunk}`.trim();
-      const transcript = [voiceFinalRef.current, interimChunk].filter(Boolean).join(" ").trim();
+      const transcript = Array.from(event.results)
+        .map(result => result[0]?.transcript?.trim() || "")
+        .filter(Boolean)
+        .join(" ")
+        .trim();
       const base = voiceBaseRef.current;
       setQuery(transcript ? `${base}${base ? "\n\n" : ""}${transcript}` : base);
     };
