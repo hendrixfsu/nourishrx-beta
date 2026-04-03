@@ -70,9 +70,9 @@ const GOALS = ["Make better food choices","Lower blood sugar / HbA1c","Build lea
 const ACT = ["Sedentary — sitting most of the day","Light — occasional walks, some movement","Moderate — intentional exercise 2-3x/week","Active — 4-5x/week structured training","Very active — daily training or physical job"];
 const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo / ancestral","Mediterranean","Low-carb / keto","Plant-based","Carnivore"];
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
-const SLOTS = ["Meal","Snack"];
+const SLOTS = [];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.11";
+const APP_VERSION = "Beta build 0.1.12";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -286,7 +286,6 @@ export default function App() {
   const [captureMode, setCaptureMode] = useState("photo");
   const [isListening, setIsListening] = useState(false);
   const [showPhotoOptions, setShowPhotoOptions] = useState(false);
-  const [pendingLog, setPendingLog] = useState(null);
   const fRef = useRef();
   const uploadRef = useRef();
   const recognitionRef = useRef(null);
@@ -487,22 +486,15 @@ export default function App() {
     setIsListening(false);
   }
 
-  function saveLoggedMeal(slot, entry) {
+  function saveLoggedMeal(entry) {
     setHistory(h => [entry, ...h.slice(0,99)]);
-    const newMeals = [...daily.meals, { label:entry.result.name, macros:entry.result.macros, time:entry.time, slot, score:entry.result.score }];
+    const newMeals = [...daily.meals, { label:entry.result.name, macros:entry.result.macros, time:entry.time, score:entry.result.score }];
     setDaily(dl => ({ ...dl, meals: newMeals }));
     const newTot = newMeals.reduce((a,m) => ({ cal:a.cal+(m.macros?.calories||0), pro:a.pro+(m.macros?.protein_g||0), carb:a.carb+(m.macros?.carbs_g||0), fat:a.fat+(m.macros?.fat_g||0), fib:a.fib+(m.macros?.fiber_g||0) }), { cal:0, pro:0, carb:0, fat:0, fib:0 });
     updateStreak();
     checkBadges(entry.result, newTot);
     const matchCount = history.filter(h => h.result.name === entry.result.name).length;
     if (matchCount >= 1 && !favorites.find(f => f.name === entry.result.name)) setRepeatPrompt(entry.result.name);
-  }
-
-  function confirmPendingSlot(slot) {
-    if (!pendingLog) return;
-    const entry = { ...pendingLog, slot };
-    saveLoggedMeal(slot, entry);
-    setPendingLog(null);
   }
 
   async function analyze() {
@@ -517,7 +509,7 @@ export default function App() {
       setAnalyzeError(`Analysis failed: ${p.error}`);
     } else if (p && !p.type) {
       const entry = { query:query||captureMode[0].toUpperCase()+captureMode.slice(1), result:p, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) };
-      setPendingLog(entry);
+      saveLoggedMeal(entry);
       setAnalyzeSuccess(p);
     } else { setAnalyzeError("Couldn't get a response — check your connection and try again."); }
     setImgData(null); setImgPrev(null); setQuery(""); setPortionNote(""); setShowPortionNote(false); setLoading(false);
@@ -526,7 +518,7 @@ export default function App() {
   function quickLog(item) {
     const p = item.result;
     const entry = { query:item.query, result:p, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) };
-    setPendingLog(entry);
+    saveLoggedMeal(entry);
     setAnalyzeSuccess(p);
   }
 
@@ -535,7 +527,7 @@ export default function App() {
     else { setFavorites(f => [...f, { name, displayName: name, result }]); }
   }
 
-  const nav = s => { setScreen(s); setAnalyzeError(null); setAnalyzeSuccess(null); setPendingLog(null); };
+  const nav = s => { setScreen(s); setAnalyzeError(null); setAnalyzeSuccess(null); };
 
   // ─── Onboarding ──────────────────────────────────────────────────────────
   const advancedGoals = profile.userMode === "Performance tracking" || profile.goals.some(g => /muscle|athletic|performance|lose|fat/i.test(g));
@@ -746,20 +738,8 @@ export default function App() {
           )}
 
           {/* Result panel */}
-          {analyzeSuccess && <ResultPanel data={analyzeSuccess} onClose={()=>{ setAnalyzeSuccess(null); setPendingLog(null); }} onStar={()=>toggleFav(analyzeSuccess.name, analyzeSuccess)} isFav={!!favorites.find(f=>f.name===analyzeSuccess.name)}/>}
+          {analyzeSuccess && <ResultPanel data={analyzeSuccess} onClose={()=>setAnalyzeSuccess(null)} onStar={()=>toggleFav(analyzeSuccess.name, analyzeSuccess)} isFav={!!favorites.find(f=>f.name===analyzeSuccess.name)}/>}
           {analyzeError && <div style={{ padding:"12px 14px", background:"#fee2e2", borderRadius:10, marginBottom:12 }}><p style={{ margin:0, fontSize:13, color:"#991b1b" }}>{analyzeError}</p></div>}
-          {pendingLog && (
-            <div style={{ background:"#f8fafc", borderRadius:14, border:"1px solid var(--color-border-secondary)", padding:"0.85rem 1rem", marginBottom:"1rem" }}>
-              <p style={{ margin:"0 0 8px", fontSize:13, fontWeight:600, color:"var(--color-text-primary)" }}>Log this as:</p>
-              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                {SLOTS.map(slot => (
-                  <button key={slot} onClick={()=>confirmPendingSlot(slot)} style={{ padding:"8px 14px", borderRadius:999, fontSize:12, cursor:"pointer", border:"1px solid var(--color-border-secondary)", background:"#fff", color:"var(--color-text-primary)", fontWeight:500 }}>
-                    {slot}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Analyze card */}
           <div style={{ background:"var(--color-background-primary)", borderRadius:18, border:"1px solid var(--color-border-secondary)", padding:"1rem", marginBottom:"1rem", boxShadow:"0 14px 30px rgba(15, 23, 42, 0.04)" }}>
@@ -870,6 +850,17 @@ export default function App() {
                 <p style={{ fontSize:13, fontWeight:500, margin:0 }}>Today's log</p>
                 <button onClick={()=>setDaily({date:todayKey(),meals:[]})} style={{ background:"none", border:"none", cursor:"pointer", fontSize:11, color:"#ef4444", padding:0 }}>Reset day</button>
               </div>
+              {daily.meals.map((m,i) => (
+                <div key={`${m.label}-${m.time}-${i}`} onClick={()=>{ const h = history.find(x=>x.result.name===m.label); if(h) setExpandedResult(expandedResult?.name===m.label?null:h.result); }}
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", marginBottom:4, background:expandedResult?.name===m.label?"#f0fdf4":"var(--color-background-primary)", borderRadius:10, cursor:"pointer", border:`0.5px solid ${expandedResult?.name===m.label?"#86efac":"var(--color-border-tertiary)"}` }}>
+                  <Ring score={m.score||5} size={36}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ margin:0, fontWeight:500, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{m.label}</p>
+                    <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)" }}>{m.time} · {Math.round(m.macros?.protein_g||0)}g pro · {Math.round(m.macros?.calories||0)} cal</p>
+                  </div>
+                  <button onClick={e=>{ e.stopPropagation(); setDaily(dl=>({...dl,meals:dl.meals.filter(x=>x!==m)})); }} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, color:"var(--color-text-tertiary)", padding:"0 2px" }}>×</button>
+                </div>
+              ))}
               {SLOTS.map(slot => {
                 const meals = daily.meals.filter(m=>m.slot===slot);
                 if (!meals.length) return null;
