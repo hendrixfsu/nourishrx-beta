@@ -72,7 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = ["Breakfast","Lunch","Dinner","Snack"];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.7";
+const APP_VERSION = "Beta build 0.1.8";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -379,16 +379,64 @@ export default function App() {
     } catch { clearTimeout(to); return null; }
   }
 
+  async function prepareImage(file) {
+    const toDataUrl = blob => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = ev => resolve(ev.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    if (file.size <= 4.5 * 1024 * 1024) {
+      const dataUrl = await toDataUrl(file);
+      return { dataUrl, base64: dataUrl.split(",")[1] };
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = objectUrl;
+      });
+
+      const maxDim = 1600;
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas_unavailable");
+      ctx.drawImage(img, 0, 0, width, height);
+
+      let quality = 0.82;
+      let dataUrl = canvas.toDataURL("image/jpeg", quality);
+      while (dataUrl.length * 0.75 > 4.5 * 1024 * 1024 && quality > 0.45) {
+        quality -= 0.08;
+        dataUrl = canvas.toDataURL("image/jpeg", quality);
+      }
+
+      return { dataUrl, base64: dataUrl.split(",")[1] };
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
   async function onImg(e) {
     const f = e.target.files[0];
     if (!f) return;
     setShowPhotoOptions(false);
-    const rd = new FileReader();
-    rd.onload = ev => {
-      setImgData(ev.target.result.split(",")[1]);
-      setImgPrev(ev.target.result);
-    };
-    rd.readAsDataURL(f);
+    try {
+      const prepared = await prepareImage(f);
+      setImgData(prepared.base64);
+      setImgPrev(prepared.dataUrl);
+      setAnalyzeError(null);
+    } catch {
+      setAnalyzeError("We couldn't prepare that photo. Try a different image or snap a new one.");
+    }
     e.target.value = "";
   }
 
