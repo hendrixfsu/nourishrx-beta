@@ -286,6 +286,7 @@ export default function App() {
   const [captureMode, setCaptureMode] = useState("photo");
   const [isListening, setIsListening] = useState(false);
   const fRef = useRef();
+  const uploadRef = useRef();
   const recognitionRef = useRef(null);
 
   // Midnight reset for daily log
@@ -403,7 +404,7 @@ export default function App() {
     recognitionRef.current = rec;
     rec.lang = "en-US";
     rec.interimResults = true;
-    rec.continuous = false;
+    rec.continuous = true;
     rec.onstart = () => {
       setCaptureMode("voice");
       setIsListening(true);
@@ -411,7 +412,11 @@ export default function App() {
     };
     rec.onresult = event => {
       const transcript = Array.from(event.results).map(r => r[0]?.transcript || "").join(" ").trim();
-      setQuery(transcript);
+      setQuery(prev => {
+        const parts = prev.split("\n\n[voice]\n");
+        const manual = parts[0] || "";
+        return `${manual}${manual ? "\n\n" : ""}[voice]\n${transcript}`;
+      });
     };
     rec.onerror = () => {
       setAnalyzeError("Voice capture was interrupted. You can try again or type a quick note.");
@@ -419,6 +424,11 @@ export default function App() {
     };
     rec.onend = () => setIsListening(false);
     rec.start();
+  }
+
+  function stopVoiceCapture() {
+    if (recognitionRef.current) recognitionRef.current.stop();
+    setIsListening(false);
   }
 
   async function triggerBarcodeMode() {
@@ -691,12 +701,12 @@ export default function App() {
               <button onClick={()=>{ setCaptureMode("photo"); fRef.current?.click(); }} style={{ padding:"12px 10px", borderRadius:14, border:captureMode==="photo"?"1.5px solid #22c55e":"1px solid var(--color-border-secondary)", background:captureMode==="photo"?"#f0fdf4":"#f8fafc", cursor:"pointer", textAlign:"left" }}>
                 <p style={{ margin:"0 0 3px", fontSize:16 }}>📸</p>
                 <p style={{ margin:"0 0 2px", fontSize:13, fontWeight:600 }}>Photo</p>
-                <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)", lineHeight:1.35 }}>Fastest for full meals</p>
+                <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)", lineHeight:1.35 }}>Take a new photo</p>
               </button>
-              <button onClick={startVoiceCapture} disabled={!voiceSupported} style={{ padding:"12px 10px", borderRadius:14, border:captureMode==="voice"?"1.5px solid #0ea5e9":"1px solid var(--color-border-secondary)", background:captureMode==="voice"?"#eff6ff":"#f8fafc", cursor:voiceSupported?"pointer":"default", textAlign:"left", opacity:voiceSupported?1:0.65 }}>
+              <button onClick={isListening ? stopVoiceCapture : startVoiceCapture} disabled={!voiceSupported} style={{ padding:"12px 10px", borderRadius:14, border:captureMode==="voice"?"1.5px solid #0ea5e9":"1px solid var(--color-border-secondary)", background:captureMode==="voice"?"#eff6ff":"#f8fafc", cursor:voiceSupported?"pointer":"default", textAlign:"left", opacity:voiceSupported?1:0.65 }}>
                 <p style={{ margin:"0 0 3px", fontSize:16 }}>{isListening ? "🎙️" : "🎤"}</p>
-                <p style={{ margin:"0 0 2px", fontSize:13, fontWeight:600 }}>{isListening ? "Listening..." : "Voice"}</p>
-                <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)", lineHeight:1.35 }}>{voiceSupported ? "Describe it out loud" : "Browser unsupported"}</p>
+                <p style={{ margin:"0 0 2px", fontSize:13, fontWeight:600 }}>{isListening ? "Stop" : "Voice"}</p>
+                <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)", lineHeight:1.35 }}>{voiceSupported ? (isListening ? "Tap again when you're done" : "Describe it out loud") : "Browser unsupported"}</p>
               </button>
               <button onClick={triggerBarcodeMode} style={{ padding:"12px 10px", borderRadius:14, border:captureMode==="barcode"?"1.5px solid #f59e0b":"1px solid var(--color-border-secondary)", background:captureMode==="barcode"?"#fffbeb":"#f8fafc", cursor:"pointer", textAlign:"left" }}>
                 <p style={{ margin:"0 0 3px", fontSize:16 }}>▥</p>
@@ -712,9 +722,20 @@ export default function App() {
               </div>
             )}
             <input ref={fRef} type="file" accept="image/*" capture={captureMode==="barcode" ? undefined : "environment"} onChange={onImg} style={{ display:"none" }}/>
+            <input ref={uploadRef} type="file" accept="image/*" onChange={onImg} style={{ display:"none" }}/>
             <div style={{ padding:"10px 12px", borderRadius:12, background:"#f8fafc", border:"1px dashed #dbe3ea", marginBottom:8 }}>
+              {captureMode==="photo" && (
+                <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+                  <button onClick={()=>fRef.current?.click()} style={{ padding:"8px 12px", borderRadius:10, border:"1px solid var(--color-border-secondary)", background:"#fff", cursor:"pointer", fontSize:12, fontWeight:500, color:"var(--color-text-primary)" }}>
+                    Use camera
+                  </button>
+                  <button onClick={()=>uploadRef.current?.click()} style={{ padding:"8px 12px", borderRadius:10, border:"1px solid var(--color-border-secondary)", background:"#fff", cursor:"pointer", fontSize:12, fontWeight:500, color:"var(--color-text-primary)" }}>
+                    Upload existing
+                  </button>
+                </div>
+              )}
               <p style={{ margin:"0 0 5px", fontSize:12, fontWeight:600, color:"var(--color-text-primary)" }}>Optional context</p>
-              <textarea value={query} onChange={e=>setQuery(e.target.value)} rows={2} placeholder={captureMode==="voice" ? "Voice transcript will appear here..." : captureMode==="barcode" ? "Brand, product name, or barcode notes..." : `Add a detail about your ${activeMeal.toLowerCase()} if helpful...`} style={{ width:"100%", fontSize:14, borderRadius:8, padding:"9px 12px", resize:"none", boxSizing:"border-box", fontFamily:"var(--font-sans)", background:"#fff" }}/>
+              <textarea value={query} onChange={e=>setQuery(e.target.value)} rows={3} placeholder={captureMode==="voice" ? "Voice transcript will appear here. You can keep talking until you tap stop." : captureMode==="barcode" ? "Brand, product name, or barcode notes..." : `Add a detail about your ${activeMeal.toLowerCase()} if helpful...`} style={{ width:"100%", fontSize:14, borderRadius:8, padding:"9px 12px", resize:"none", boxSizing:"border-box", fontFamily:"var(--font-sans)", background:"#fff" }}/>
             </div>
             <div style={{ display:"flex", gap:8, marginBottom: showPortionNote?8:0 }}>
               <button onClick={analyze} disabled={loading||(!query.trim()&&!imgData)} style={{ flex:1, padding:"9px", borderRadius:10, background:loading||(!query.trim()&&!imgData)?"var(--color-background-secondary)":"#16a34a", color:loading||(!query.trim()&&!imgData)?"var(--color-text-secondary)":"#fff", border:"none", fontSize:14, fontWeight:500, cursor:"pointer" }}>
@@ -723,7 +744,7 @@ export default function App() {
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, marginBottom:showPortionNote?0:4 }}>
               <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)" }}>
-                {captureMode==="photo" ? "Best for mixed meals and restaurant plates." : captureMode==="voice" ? "Great for quick logging when typing feels annoying." : "Best for packaged foods and snack items."}
+                {captureMode==="photo" ? "Use the camera for something fresh, or upload a saved photo from your phone." : captureMode==="voice" ? (isListening ? "Recording stays open until you tap stop." : "Tap once to start talking, then tap again when you're done.") : "Best for packaged foods and snack items."}
               </p>
             </div>
             <button onClick={()=>setShowPortionNote(s=>!s)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:11, color:"var(--color-text-tertiary)", padding:"4px 0", display:"block" }}>
