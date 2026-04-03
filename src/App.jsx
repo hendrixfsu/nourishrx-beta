@@ -72,7 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = ["Breakfast","Lunch","Dinner","Snack"];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.5";
+const APP_VERSION = "Beta build 0.1.6";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -291,7 +291,8 @@ export default function App() {
   const uploadRef = useRef();
   const recognitionRef = useRef(null);
   const voiceBaseRef = useRef("");
-  const voiceSegmentsRef = useRef([]);
+  const voiceFinalChunksRef = useRef([]);
+  const voiceInterimRef = useRef("");
 
   // Midnight reset for daily log
   useEffect(() => {
@@ -403,7 +404,8 @@ export default function App() {
     rec.interimResults = true;
     rec.continuous = true;
     voiceBaseRef.current = query.trim();
-    voiceSegmentsRef.current = [];
+    voiceFinalChunksRef.current = [];
+    voiceInterimRef.current = "";
     rec.onstart = () => {
       setCaptureMode("voice");
       setIsListening(true);
@@ -411,13 +413,18 @@ export default function App() {
       setShowPhotoOptions(false);
     };
     rec.onresult = event => {
-      const nextSegments = [];
-      for (let i = 0; i < event.results.length; i += 1) {
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const text = event.results[i][0]?.transcript?.trim() || "";
-        if (text) nextSegments[i] = text;
+        if (!text) continue;
+        if (event.results[i].isFinal) {
+          const chunks = voiceFinalChunksRef.current;
+          if (!chunks.length || chunks[chunks.length - 1] !== text) chunks.push(text);
+          voiceInterimRef.current = "";
+        } else {
+          voiceInterimRef.current = text;
+        }
       }
-      voiceSegmentsRef.current = nextSegments;
-      const transcript = nextSegments.filter(Boolean).join(" ").trim();
+      const transcript = [...voiceFinalChunksRef.current, voiceInterimRef.current].filter(Boolean).join(" ").trim();
       const base = voiceBaseRef.current;
       setQuery(transcript ? `${base}${base ? "\n\n" : ""}${transcript}` : base);
     };
