@@ -72,6 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = ["Breakfast","Lunch","Dinner","Snack"];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
+const APP_VERSION = "Beta build 0.1.3";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -285,9 +286,12 @@ export default function App() {
   const [repeatPrompt, setRepeatPrompt] = useState(null);
   const [captureMode, setCaptureMode] = useState("photo");
   const [isListening, setIsListening] = useState(false);
+  const [showPhotoOptions, setShowPhotoOptions] = useState(false);
   const fRef = useRef();
   const uploadRef = useRef();
   const recognitionRef = useRef(null);
+  const voiceBaseRef = useRef("");
+  const voiceFinalRef = useRef("");
 
   // Midnight reset for daily log
   useEffect(() => {
@@ -379,6 +383,7 @@ export default function App() {
   async function onImg(e) {
     const f = e.target.files[0];
     if (!f) return;
+    setShowPhotoOptions(false);
     if (captureMode === "barcode" && barcodeSupported) {
       try {
         const detector = new window.BarcodeDetector();
@@ -393,6 +398,7 @@ export default function App() {
       setImgPrev(ev.target.result);
     };
     rd.readAsDataURL(f);
+    e.target.value = "";
   }
 
   function startVoiceCapture() {
@@ -405,18 +411,27 @@ export default function App() {
     rec.lang = "en-US";
     rec.interimResults = true;
     rec.continuous = true;
+    voiceBaseRef.current = query.trim();
+    voiceFinalRef.current = "";
     rec.onstart = () => {
       setCaptureMode("voice");
       setIsListening(true);
       setAnalyzeError(null);
+      setShowPhotoOptions(false);
     };
     rec.onresult = event => {
-      const transcript = Array.from(event.results).map(r => r[0]?.transcript || "").join(" ").trim();
-      setQuery(prev => {
-        const parts = prev.split("\n\n[voice]\n");
-        const manual = parts[0] || "";
-        return `${manual}${manual ? "\n\n" : ""}[voice]\n${transcript}`;
-      });
+      let finalChunk = "";
+      let interimChunk = "";
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const chunk = event.results[i][0]?.transcript?.trim();
+        if (!chunk) continue;
+        if (event.results[i].isFinal) finalChunk = `${finalChunk} ${chunk}`.trim();
+        else interimChunk = `${interimChunk} ${chunk}`.trim();
+      }
+      if (finalChunk) voiceFinalRef.current = `${voiceFinalRef.current} ${finalChunk}`.trim();
+      const transcript = [voiceFinalRef.current, interimChunk].filter(Boolean).join(" ").trim();
+      const base = voiceBaseRef.current;
+      setQuery(transcript ? `${base}${base ? "\n\n" : ""}${transcript}` : base);
     };
     rec.onerror = () => {
       setAnalyzeError("Voice capture was interrupted. You can try again or type a quick note.");
@@ -434,6 +449,7 @@ export default function App() {
   async function triggerBarcodeMode() {
     setCaptureMode("barcode");
     setAnalyzeError(null);
+    setShowPhotoOptions(false);
     if (!fRef.current) return;
     fRef.current.click();
   }
@@ -631,6 +647,9 @@ export default function App() {
           <button onClick={()=>nav("profile")} style={{ background:"none", border:"none", cursor:"pointer", fontSize:17, color:"var(--color-text-secondary)", padding:4 }}>⚙</button>
         </div>
       </div>
+      <div style={{ marginTop:"-0.5rem", marginBottom:"0.85rem" }}>
+        <span style={{ fontSize:10, color:"var(--color-text-secondary)", padding:"2px 8px", borderRadius:999, background:"var(--color-background-secondary)", border:"1px solid var(--color-border-secondary)", textTransform:"uppercase", letterSpacing:"0.04em" }}>{APP_VERSION}</span>
+      </div>
 
       {/* Nav */}
       <div style={{ display:"flex", gap:6, marginBottom:"1.25rem", overflowX:"auto", paddingBottom:2 }}>
@@ -698,10 +717,10 @@ export default function App() {
           {/* Analyze card */}
           <div style={{ background:"var(--color-background-primary)", borderRadius:18, border:"1px solid var(--color-border-secondary)", padding:"1rem", marginBottom:"1rem", boxShadow:"0 14px 30px rgba(15, 23, 42, 0.04)" }}>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:10 }}>
-              <button onClick={()=>{ setCaptureMode("photo"); fRef.current?.click(); }} style={{ padding:"12px 10px", borderRadius:14, border:captureMode==="photo"?"1.5px solid #22c55e":"1px solid var(--color-border-secondary)", background:captureMode==="photo"?"#f0fdf4":"#f8fafc", cursor:"pointer", textAlign:"left" }}>
+              <button onClick={()=>{ setCaptureMode("photo"); setShowPhotoOptions(s => !s || captureMode !== "photo"); }} style={{ padding:"12px 10px", borderRadius:14, border:captureMode==="photo"?"1.5px solid #22c55e":"1px solid var(--color-border-secondary)", background:captureMode==="photo"?"#f0fdf4":"#f8fafc", cursor:"pointer", textAlign:"left" }}>
                 <p style={{ margin:"0 0 3px", fontSize:16 }}>📸</p>
                 <p style={{ margin:"0 0 2px", fontSize:13, fontWeight:600 }}>Photo</p>
-                <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)", lineHeight:1.35 }}>Take a new photo</p>
+                <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)", lineHeight:1.35 }}>Camera or photo library</p>
               </button>
               <button onClick={isListening ? stopVoiceCapture : startVoiceCapture} disabled={!voiceSupported} style={{ padding:"12px 10px", borderRadius:14, border:captureMode==="voice"?"1.5px solid #0ea5e9":"1px solid var(--color-border-secondary)", background:captureMode==="voice"?"#eff6ff":"#f8fafc", cursor:voiceSupported?"pointer":"default", textAlign:"left", opacity:voiceSupported?1:0.65 }}>
                 <p style={{ margin:"0 0 3px", fontSize:16 }}>{isListening ? "🎙️" : "🎤"}</p>
@@ -724,7 +743,7 @@ export default function App() {
             <input ref={fRef} type="file" accept="image/*" capture={captureMode==="barcode" ? undefined : "environment"} onChange={onImg} style={{ display:"none" }}/>
             <input ref={uploadRef} type="file" accept="image/*" onChange={onImg} style={{ display:"none" }}/>
             <div style={{ padding:"10px 12px", borderRadius:12, background:"#f8fafc", border:"1px dashed #dbe3ea", marginBottom:8 }}>
-              {captureMode==="photo" && (
+              {captureMode==="photo" && showPhotoOptions && (
                 <div style={{ display:"flex", gap:8, marginBottom:10 }}>
                   <button onClick={()=>fRef.current?.click()} style={{ padding:"8px 12px", borderRadius:10, border:"1px solid var(--color-border-secondary)", background:"#fff", cursor:"pointer", fontSize:12, fontWeight:500, color:"var(--color-text-primary)" }}>
                     Use camera
@@ -744,7 +763,7 @@ export default function App() {
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, marginBottom:showPortionNote?0:4 }}>
               <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)" }}>
-                {captureMode==="photo" ? "Use the camera for something fresh, or upload a saved photo from your phone." : captureMode==="voice" ? (isListening ? "Recording stays open until you tap stop." : "Tap once to start talking, then tap again when you're done.") : "Best for packaged foods and snack items."}
+                {captureMode==="photo" ? (showPhotoOptions ? "Choose camera or photo library." : "Tap photo to choose camera or your photo library.") : captureMode==="voice" ? (isListening ? "Recording stays open until you tap stop." : "Tap once to start talking, then tap again when you're done.") : "Best for packaged foods and snack items."}
               </p>
             </div>
             <button onClick={()=>setShowPortionNote(s=>!s)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:11, color:"var(--color-text-tertiary)", padding:"4px 0", display:"block" }}>
