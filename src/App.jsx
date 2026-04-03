@@ -316,7 +316,6 @@ export default function App() {
   const wantsBloodSugar = profile.goals.some(g => /blood sugar|hba1c/i.test(g)) || profile.careAbout?.includes("Blood sugar impact");
   const wantsSymptoms = profile.careAbout?.includes("Symptom notes");
   const voiceSupported = typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  const barcodeSupported = typeof window !== "undefined" && "BarcodeDetector" in window;
   const fTgt = parseInt(profile.fiberTarget) || 35;
 
   // Override with custom targets if set
@@ -384,14 +383,6 @@ export default function App() {
     const f = e.target.files[0];
     if (!f) return;
     setShowPhotoOptions(false);
-    if (captureMode === "barcode" && barcodeSupported) {
-      try {
-        const detector = new window.BarcodeDetector();
-        const bitmap = await createImageBitmap(f);
-        const codes = await detector.detect(bitmap);
-        if (codes?.length) setQuery(codes[0].rawValue || "");
-      } catch {}
-    }
     const rd = new FileReader();
     rd.onload = ev => {
       setImgData(ev.target.result.split(",")[1]);
@@ -446,20 +437,12 @@ export default function App() {
     setIsListening(false);
   }
 
-  async function triggerBarcodeMode() {
-    setCaptureMode("barcode");
-    setAnalyzeError(null);
-    setShowPhotoOptions(false);
-    if (!fRef.current) return;
-    fRef.current.click();
-  }
-
   async function analyze() {
     if (!query.trim() && !imgData) return;
     setLoading(true); setAnalyzeError(null); setAnalyzeSuccess(null); setExpandedResult(null);
     const ctx = `User: mode=${profile.userMode || "unselected"}, goals=${profile.goals.join(", ")}, care_about=${(profile.careAbout||[]).join(", ")}, coaching=${profile.coachStyle}, weight=${parseFloat(profile.weight)||0}lbs, activity=${profile.activityLevel}.`;
     const pCtx = portionNote.trim() ? ` Portion note: ${portionNote}.` : "";
-    const modeLead = captureMode === "barcode" ? "Analyze this barcode-linked food" : captureMode === "voice" ? "Analyze this voice-described meal" : "Analyze this meal photo";
+    const modeLead = captureMode === "voice" ? "Analyze this voice-described meal" : "Analyze this meal photo";
     const prompt = imgData ? `${modeLead} for ${activeMeal}. ${query?"Context: "+query:""} ${ctx}${pCtx}` : `Analyze this ${activeMeal}: "${query}".${pCtx} ${ctx}`;
     const p = await apicall(prompt, imgData);
     if (p?.type === "client_error") {
@@ -716,7 +699,7 @@ export default function App() {
 
           {/* Analyze card */}
           <div style={{ background:"var(--color-background-primary)", borderRadius:18, border:"1px solid var(--color-border-secondary)", padding:"1rem", marginBottom:"1rem", boxShadow:"0 14px 30px rgba(15, 23, 42, 0.04)" }}>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:10 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8, marginBottom:10 }}>
               <button onClick={()=>{ setCaptureMode("photo"); setShowPhotoOptions(s => !s || captureMode !== "photo"); }} style={{ padding:"12px 10px", borderRadius:14, border:captureMode==="photo"?"1.5px solid #22c55e":"1px solid var(--color-border-secondary)", background:captureMode==="photo"?"#f0fdf4":"#f8fafc", cursor:"pointer", textAlign:"left" }}>
                 <p style={{ margin:"0 0 3px", fontSize:16 }}>📸</p>
                 <p style={{ margin:"0 0 2px", fontSize:13, fontWeight:600 }}>Photo</p>
@@ -727,11 +710,6 @@ export default function App() {
                 <p style={{ margin:"0 0 2px", fontSize:13, fontWeight:600 }}>{isListening ? "Stop" : "Voice"}</p>
                 <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)", lineHeight:1.35 }}>{voiceSupported ? (isListening ? "Tap again when you're done" : "Describe it out loud") : "Browser unsupported"}</p>
               </button>
-              <button onClick={triggerBarcodeMode} style={{ padding:"12px 10px", borderRadius:14, border:captureMode==="barcode"?"1.5px solid #f59e0b":"1px solid var(--color-border-secondary)", background:captureMode==="barcode"?"#fffbeb":"#f8fafc", cursor:"pointer", textAlign:"left" }}>
-                <p style={{ margin:"0 0 3px", fontSize:16 }}>▥</p>
-                <p style={{ margin:"0 0 2px", fontSize:13, fontWeight:600 }}>Barcode</p>
-                <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)", lineHeight:1.35 }}>{barcodeSupported ? "Scan packaged foods" : "Upload barcode photo"}</p>
-              </button>
             </div>
 
             {imgPrev && (
@@ -740,7 +718,7 @@ export default function App() {
                 <button onClick={()=>{ setImgData(null); setImgPrev(null); }} style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,0.6)", color:"#fff", border:"none", borderRadius:20, padding:"3px 9px", cursor:"pointer", fontSize:12 }}>✕</button>
               </div>
             )}
-            <input ref={fRef} type="file" accept="image/*" capture={captureMode==="barcode" ? undefined : "environment"} onChange={onImg} style={{ display:"none" }}/>
+            <input ref={fRef} type="file" accept="image/*" capture="environment" onChange={onImg} style={{ display:"none" }}/>
             <input ref={uploadRef} type="file" accept="image/*" onChange={onImg} style={{ display:"none" }}/>
             <div style={{ padding:"10px 12px", borderRadius:12, background:"#f8fafc", border:"1px dashed #dbe3ea", marginBottom:8 }}>
               {captureMode==="photo" && showPhotoOptions && (
@@ -754,7 +732,7 @@ export default function App() {
                 </div>
               )}
               <p style={{ margin:"0 0 5px", fontSize:12, fontWeight:600, color:"var(--color-text-primary)" }}>Optional context</p>
-              <textarea value={query} onChange={e=>setQuery(e.target.value)} rows={3} placeholder={captureMode==="voice" ? "Voice transcript will appear here. You can keep talking until you tap stop." : captureMode==="barcode" ? "Brand, product name, or barcode notes..." : `Add a detail about your ${activeMeal.toLowerCase()} if helpful...`} style={{ width:"100%", fontSize:14, borderRadius:8, padding:"9px 12px", resize:"none", boxSizing:"border-box", fontFamily:"var(--font-sans)", background:"#fff" }}/>
+              <textarea value={query} onChange={e=>setQuery(e.target.value)} rows={3} placeholder={captureMode==="voice" ? "Voice transcript will appear here. You can keep talking until you tap stop." : `Add a detail about your ${activeMeal.toLowerCase()} if helpful...`} style={{ width:"100%", fontSize:14, borderRadius:8, padding:"9px 12px", resize:"none", boxSizing:"border-box", fontFamily:"var(--font-sans)", background:"#fff" }}/>
             </div>
             <div style={{ display:"flex", gap:8, marginBottom: showPortionNote?8:0 }}>
               <button onClick={analyze} disabled={loading||(!query.trim()&&!imgData)} style={{ flex:1, padding:"9px", borderRadius:10, background:loading||(!query.trim()&&!imgData)?"var(--color-background-secondary)":"#16a34a", color:loading||(!query.trim()&&!imgData)?"var(--color-text-secondary)":"#fff", border:"none", fontSize:14, fontWeight:500, cursor:"pointer" }}>
@@ -763,7 +741,7 @@ export default function App() {
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, marginBottom:showPortionNote?0:4 }}>
               <p style={{ margin:0, fontSize:11, color:"var(--color-text-secondary)" }}>
-                {captureMode==="photo" ? (showPhotoOptions ? "Choose camera or photo library." : "Tap photo to choose camera or your photo library.") : captureMode==="voice" ? (isListening ? "Recording stays open until you tap stop." : "Tap once to start talking, then tap again when you're done.") : "Best for packaged foods and snack items."}
+                {captureMode==="photo" ? (showPhotoOptions ? "Choose camera or photo library." : "Tap photo to choose camera or your photo library.") : (isListening ? "Recording stays open until you tap stop." : "Tap once to start talking, then tap again when you're done.")}
               </p>
             </div>
             <button onClick={()=>setShowPortionNote(s=>!s)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:11, color:"var(--color-text-tertiary)", padding:"4px 0", display:"block" }}>
