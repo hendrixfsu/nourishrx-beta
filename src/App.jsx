@@ -72,7 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = ["Breakfast","Lunch","Dinner","Snack"];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.9";
+const APP_VERSION = "Beta build 0.1.10";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -273,7 +273,6 @@ export default function App() {
   const [analyzeError, setAnalyzeError] = useState(null);
   const [analyzeSuccess, setAnalyzeSuccess] = useState(null);
   const [query, setQuery] = useState("");
-  const [activeMeal, setActiveMeal] = useState("Breakfast");
   const [portionNote, setPortionNote] = useState("");
   const [showPortionNote, setShowPortionNote] = useState(false);
   const [imgData, setImgData] = useState(null);
@@ -287,6 +286,7 @@ export default function App() {
   const [captureMode, setCaptureMode] = useState("photo");
   const [isListening, setIsListening] = useState(false);
   const [showPhotoOptions, setShowPhotoOptions] = useState(false);
+  const [pendingLog, setPendingLog] = useState(null);
   const fRef = useRef();
   const uploadRef = useRef();
   const recognitionRef = useRef(null);
@@ -487,36 +487,47 @@ export default function App() {
     setIsListening(false);
   }
 
+  function saveLoggedMeal(slot, entry) {
+    setHistory(h => [entry, ...h.slice(0,99)]);
+    const newMeals = [...daily.meals, { label:entry.result.name, macros:entry.result.macros, time:entry.time, slot, score:entry.result.score }];
+    setDaily(dl => ({ ...dl, meals: newMeals }));
+    const newTot = newMeals.reduce((a,m) => ({ cal:a.cal+(m.macros?.calories||0), pro:a.pro+(m.macros?.protein_g||0), carb:a.carb+(m.macros?.carbs_g||0), fat:a.fat+(m.macros?.fat_g||0), fib:a.fib+(m.macros?.fiber_g||0) }), { cal:0, pro:0, carb:0, fat:0, fib:0 });
+    updateStreak();
+    checkBadges(entry.result, newTot);
+    const matchCount = history.filter(h => h.result.name === entry.result.name).length;
+    if (matchCount >= 1 && !favorites.find(f => f.name === entry.result.name)) setRepeatPrompt(entry.result.name);
+  }
+
+  function confirmPendingSlot(slot) {
+    if (!pendingLog) return;
+    const entry = { ...pendingLog, slot };
+    saveLoggedMeal(slot, entry);
+    setPendingLog(null);
+  }
+
   async function analyze() {
     if (!query.trim() && !imgData) return;
     setLoading(true); setAnalyzeError(null); setAnalyzeSuccess(null); setExpandedResult(null);
     const ctx = `User: mode=${profile.userMode || "unselected"}, goals=${profile.goals.join(", ")}, care_about=${(profile.careAbout||[]).join(", ")}, coaching=${profile.coachStyle}, weight=${parseFloat(profile.weight)||0}lbs, activity=${profile.activityLevel}.`;
     const pCtx = portionNote.trim() ? ` Portion note: ${portionNote}.` : "";
     const modeLead = captureMode === "voice" ? "Analyze this voice-described meal" : "Analyze this meal photo";
-    const prompt = imgData ? `${modeLead} for ${activeMeal}. ${query?"Context: "+query:""} ${ctx}${pCtx}` : `Analyze this ${activeMeal}: "${query}".${pCtx} ${ctx}`;
+    const prompt = imgData ? `${modeLead}. ${query?"Context: "+query:""} ${ctx}${pCtx}` : `Analyze this food or meal: "${query}".${pCtx} ${ctx}`;
     const p = await apicall(prompt, imgData);
     if (p?.type === "client_error") {
       setAnalyzeError(`Analysis failed: ${p.error}`);
     } else if (p && !p.type) {
-      const entry = { query:query||captureMode[0].toUpperCase()+captureMode.slice(1), result:p, slot:activeMeal, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) };
-      setHistory(h => [entry, ...h.slice(0,99)]);
-      const newMeals = [...daily.meals, { label:p.name, macros:p.macros, time:entry.time, slot:activeMeal, score:p.score }];
-      setDaily(dl => ({ ...dl, meals: newMeals }));
-      const newTot = newMeals.reduce((a,m) => ({ cal:a.cal+(m.macros?.calories||0), pro:a.pro+(m.macros?.protein_g||0), carb:a.carb+(m.macros?.carbs_g||0), fat:a.fat+(m.macros?.fat_g||0), fib:a.fib+(m.macros?.fiber_g||0) }), { cal:0, pro:0, carb:0, fat:0, fib:0 });
-      updateStreak(); checkBadges(p, newTot); setAnalyzeSuccess(p);
-      // Repeat meal detection
-      const matchCount = history.filter(h => h.result.name === p.name).length;
-      if (matchCount >= 1 && !favorites.find(f => f.name === p.name)) setRepeatPrompt(p.name);
+      const entry = { query:query||captureMode[0].toUpperCase()+captureMode.slice(1), result:p, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) };
+      setPendingLog(entry);
+      setAnalyzeSuccess(p);
     } else { setAnalyzeError("Couldn't get a response — check your connection and try again."); }
     setImgData(null); setImgPrev(null); setQuery(""); setPortionNote(""); setShowPortionNote(false); setLoading(false);
   }
 
   function quickLog(item) {
     const p = item.result;
-    const entry = { query:item.query, result:p, slot:activeMeal, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) };
-    setHistory(h => [entry, ...h.slice(0,99)]);
-    setDaily(dl => ({ ...dl, meals:[...dl.meals, { label:p.name, macros:p.macros, time:entry.time, slot:activeMeal, score:p.score }] }));
-    updateStreak(); setAnalyzeSuccess(p);
+    const entry = { query:item.query, result:p, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) };
+    setPendingLog(entry);
+    setAnalyzeSuccess(p);
   }
 
   function toggleFav(name, result) {
@@ -524,7 +535,7 @@ export default function App() {
     else { setFavorites(f => [...f, { name, displayName: name, result }]); }
   }
 
-  const nav = s => { setScreen(s); setAnalyzeError(null); setAnalyzeSuccess(null); };
+  const nav = s => { setScreen(s); setAnalyzeError(null); setAnalyzeSuccess(null); setPendingLog(null); };
 
   // ─── Onboarding ──────────────────────────────────────────────────────────
   const advancedGoals = profile.userMode === "Performance tracking" || profile.goals.some(g => /muscle|athletic|performance|lose|fat/i.test(g));
@@ -735,17 +746,20 @@ export default function App() {
           )}
 
           {/* Result panel */}
-          {analyzeSuccess && <ResultPanel data={analyzeSuccess} onClose={()=>setAnalyzeSuccess(null)} onStar={()=>toggleFav(analyzeSuccess.name, analyzeSuccess)} isFav={!!favorites.find(f=>f.name===analyzeSuccess.name)}/>}
+          {analyzeSuccess && <ResultPanel data={analyzeSuccess} onClose={()=>{ setAnalyzeSuccess(null); setPendingLog(null); }} onStar={()=>toggleFav(analyzeSuccess.name, analyzeSuccess)} isFav={!!favorites.find(f=>f.name===analyzeSuccess.name)}/>}
           {analyzeError && <div style={{ padding:"12px 14px", background:"#fee2e2", borderRadius:10, marginBottom:12 }}><p style={{ margin:0, fontSize:13, color:"#991b1b" }}>{analyzeError}</p></div>}
-
-          {/* Meal slot selector */}
-          <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
-            {SLOTS.map(slot => { const logged = daily.meals.filter(m=>m.slot===slot); const active = activeMeal===slot; return (
-              <button key={slot} onClick={()=>setActiveMeal(slot)} style={{ padding:"6px 12px", borderRadius:20, fontSize:12, cursor:"pointer", border:active?"2px solid #16a34a":"0.5px solid var(--color-border-secondary)", background:active?"#f0fdf4":"var(--color-background-primary)", color:active?"#166534":"var(--color-text-primary)", fontWeight:active?500:400, display:"flex", alignItems:"center", gap:5 }}>
-                {slot}{logged.length>0 && <span style={{ fontSize:10, background:"#16a34a", color:"#fff", borderRadius:"50%", width:15, height:15, display:"flex", alignItems:"center", justifyContent:"center" }}>{logged.length}</span>}
-              </button>
-            ); })}
-          </div>
+          {pendingLog && (
+            <div style={{ background:"#f8fafc", borderRadius:14, border:"1px solid var(--color-border-secondary)", padding:"0.85rem 1rem", marginBottom:"1rem" }}>
+              <p style={{ margin:"0 0 8px", fontSize:13, fontWeight:600, color:"var(--color-text-primary)" }}>Log this as:</p>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {SLOTS.map(slot => (
+                  <button key={slot} onClick={()=>confirmPendingSlot(slot)} style={{ padding:"8px 14px", borderRadius:999, fontSize:12, cursor:"pointer", border:"1px solid var(--color-border-secondary)", background:"#fff", color:"var(--color-text-primary)", fontWeight:500 }}>
+                    {slot}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Analyze card */}
           <div style={{ background:"var(--color-background-primary)", borderRadius:18, border:"1px solid var(--color-border-secondary)", padding:"1rem", marginBottom:"1rem", boxShadow:"0 14px 30px rgba(15, 23, 42, 0.04)" }}>
@@ -782,7 +796,7 @@ export default function App() {
                 </div>
               )}
               <p style={{ margin:"0 0 5px", fontSize:12, fontWeight:600, color:"var(--color-text-primary)" }}>Optional context</p>
-              <textarea value={query} onChange={e=>setQuery(e.target.value)} rows={3} placeholder={captureMode==="voice" ? (isListening ? "Recording... your note will appear when you tap stop." : "Tap voice, speak naturally, then tap stop.") : `Add a detail about your ${activeMeal.toLowerCase()} if helpful...`} style={{ width:"100%", fontSize:14, borderRadius:8, padding:"9px 12px", resize:"none", boxSizing:"border-box", fontFamily:"var(--font-sans)", background:"#fff" }}/>
+              <textarea value={query} onChange={e=>setQuery(e.target.value)} rows={3} placeholder={captureMode==="voice" ? (isListening ? "Recording... your note will appear when you tap stop." : "Tap voice, speak naturally, then tap stop.") : "Add a detail about this food or meal if helpful..."} style={{ width:"100%", fontSize:14, borderRadius:8, padding:"9px 12px", resize:"none", boxSizing:"border-box", fontFamily:"var(--font-sans)", background:"#fff" }}/>
             </div>
             <div style={{ display:"flex", gap:8, marginBottom: showPortionNote?8:0 }}>
               <button onClick={analyze} disabled={loading||(!query.trim()&&!imgData)} style={{ flex:1, padding:"9px", borderRadius:10, background:loading||(!query.trim()&&!imgData)?"var(--color-background-secondary)":"#16a34a", color:loading||(!query.trim()&&!imgData)?"var(--color-text-secondary)":"#fff", border:"none", fontSize:14, fontWeight:500, cursor:"pointer" }}>
