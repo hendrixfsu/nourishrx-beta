@@ -70,9 +70,9 @@ const GOALS = ["Make better food choices","Lower blood sugar / HbA1c","Build lea
 const ACT = ["Sedentary — sitting most of the day","Light — occasional walks, some movement","Moderate — intentional exercise 2-3x/week","Active — 4-5x/week structured training","Very active — daily training or physical job"];
 const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo / ancestral","Mediterranean","Low-carb / keto","Plant-based","Carnivore"];
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
-const SLOTS = ["Breakfast","Lunch","Dinner","Snack"];
+const SLOTS = ["Meal","Snack"];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.10";
+const APP_VERSION = "Beta build 0.1.11";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
