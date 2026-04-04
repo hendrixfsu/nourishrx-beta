@@ -72,7 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = [];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.14";
+const APP_VERSION = "Beta build 0.1.15";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -336,6 +336,8 @@ export default function App() {
   const tFat = profile.customTargets?.fat || fatTarget;
   const macroDrivenCal = Math.round((tPhi * 4) + (tCarb * 4) + (tFat * 9));
   const tCal = profile.customTargets?.cal || macroDrivenCal || calTarget;
+  const hasManualCalOverride = profile.customTargets?.cal != null;
+  const calMismatch = hasManualCalOverride ? Math.abs(tCal - macroDrivenCal) : 0;
 
   // Daily totals
   const tot = daily.meals.reduce((a,m) => ({
@@ -1158,6 +1160,13 @@ export default function App() {
               </div>
             ))}
             <p style={{ margin:"4px 0 0", fontSize:11, color:"var(--color-text-tertiary)", lineHeight:1.4 }}>Calories follow your protein/carbs/fat targets unless you type a custom calorie goal.</p>
+            {hasManualCalOverride && calMismatch > 10 && (
+              <div style={{ marginTop:10, padding:"10px 12px", background:"#fff7ed", borderRadius:8, border:"0.5px solid #fdba74" }}>
+                <p style={{ margin:"0 0 6px", fontSize:12, color:"#9a3412", lineHeight:1.4 }}>Your manual calorie target does not match your current macro targets.</p>
+                <p style={{ margin:"0 0 8px", fontSize:11, color:"#9a3412" }}>Macro-based calories: {macroDrivenCal} · Manual calories: {tCal}</p>
+                <button onClick={()=>resetCustomTarget("cal")} style={{ padding:"6px 10px", borderRadius:8, background:"#fff", border:"1px solid #fdba74", fontSize:12, cursor:"pointer", color:"#9a3412" }}>Match calories to macros</button>
+              </div>
+            )}
           </div>
           <div style={{ background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", padding:"1rem", marginBottom:12 }}>
             <p style={{ margin:"0 0 8px", fontWeight:500, fontSize:14 }}>Beta build</p>
