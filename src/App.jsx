@@ -72,7 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = [];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.13";
+const APP_VERSION = "Beta build 0.1.14";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -283,6 +283,7 @@ export default function App() {
   const [editingFav, setEditingFav] = useState(null);
   const [favNameInput, setFavNameInput] = useState("");
   const [weightInput, setWeightInput] = useState("");
+  const [customTargetInputs, setCustomTargetInputs] = useState({});
   const [repeatPrompt, setRepeatPrompt] = useState(null);
   const [captureMode, setCaptureMode] = useState("photo");
   const [isListening, setIsListening] = useState(false);
@@ -307,6 +308,16 @@ export default function App() {
     if (recognitionRef.current) recognitionRef.current.stop();
   }, []);
 
+  useEffect(() => {
+    setCustomTargetInputs({
+      proteinMin: profile.customTargets?.proteinMin?.toString() ?? "",
+      proteinMax: profile.customTargets?.proteinMax?.toString() ?? "",
+      cal: profile.customTargets?.cal?.toString() ?? "",
+      carb: profile.customTargets?.carb?.toString() ?? "",
+      fat: profile.customTargets?.fat?.toString() ?? "",
+    });
+  }, [profile.customTargets]);
+
   // Computed targets
   const targets = calcTargets(profile);
   const { pLo, pHi, calTarget, fatTarget, carbTarget, tdee, isLoss, isMuscle, isKeto } = targets;
@@ -321,9 +332,10 @@ export default function App() {
   // Override with custom targets if set
   const tPlo = profile.customTargets?.proteinMin || pLo;
   const tPhi = profile.customTargets?.proteinMax || pHi;
-  const tCal = profile.customTargets?.cal || calTarget;
   const tCarb = profile.customTargets?.carb || carbTarget;
   const tFat = profile.customTargets?.fat || fatTarget;
+  const macroDrivenCal = Math.round((tPhi * 4) + (tCarb * 4) + (tFat * 9));
+  const tCal = profile.customTargets?.cal || macroDrivenCal || calTarget;
 
   // Daily totals
   const tot = daily.meals.reduce((a,m) => ({
@@ -523,6 +535,28 @@ export default function App() {
     const entry = { query:item.query, result:p, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) };
     saveLoggedMeal(entry);
     setAnalyzeSuccess(p);
+  }
+
+  function updateCustomTarget(key, rawValue) {
+    setCustomTargetInputs(prev => ({ ...prev, [key]: rawValue }));
+    setProfile(p => ({
+      ...p,
+      customTargets: {
+        ...p.customTargets,
+        [key]: rawValue === "" ? undefined : parseInt(rawValue, 10) || undefined,
+      }
+    }));
+  }
+
+  function resetCustomTarget(key) {
+    setCustomTargetInputs(prev => ({ ...prev, [key]: "" }));
+    setProfile(p => ({
+      ...p,
+      customTargets: {
+        ...p.customTargets,
+        [key]: undefined,
+      }
+    }));
   }
 
   function toggleFav(name, result) {
@@ -1115,14 +1149,15 @@ export default function App() {
           </div>
           <div style={{ background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", padding:"1rem", marginBottom:12 }}>
             <p style={{ margin:"0 0 8px", fontWeight:500, fontSize:14 }}>Custom targets</p>
-            <p style={{ margin:"0 0 10px", fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.45 }}>If the default estimates feel off for you, tighten them here so your daily bars match how you actually want to eat.</p>
+            <p style={{ margin:"0 0 10px", fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.45 }}>If the default estimates feel off for you, tighten them here so your daily bars match how you actually want to eat. Changes apply automatically.</p>
             {[["Protein minimum (g)","proteinMin",tPlo],["Protein upper range (g)","proteinMax",tPhi],["Calories","cal",tCal],["Carbs (g)","carb",tCarb],["Fat (g)","fat",tFat]].filter(([,key]) => key.startsWith("protein") || key==="cal" ? true : isFullTracking).map(([label,key,val]) => (
               <div key={key} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
                 <span style={{ fontSize:12, color:"var(--color-text-secondary)", width:140, flexShrink:0 }}>{label}</span>
-                <input type="number" value={profile.customTargets?.[key] ?? val} onChange={e=>setProfile(p=>({...p,customTargets:{...p.customTargets,[key]:parseInt(e.target.value)||undefined}}))} style={{ flex:1, fontSize:13, borderRadius:8, padding:"6px 10px", boxSizing:"border-box" }}/>
-                <button onClick={()=>setProfile(p=>({...p,customTargets:{...p.customTargets,[key]:undefined}}))} style={{ fontSize:11, color:"#9ca3af", background:"none", border:"none", cursor:"pointer" }}>reset</button>
+                <input type="number" inputMode="numeric" value={customTargetInputs[key] ?? ""} placeholder={String(val)} onChange={e=>updateCustomTarget(key, e.target.value)} style={{ flex:1, fontSize:13, borderRadius:8, padding:"6px 10px", boxSizing:"border-box" }}/>
+                <button onClick={()=>resetCustomTarget(key)} style={{ fontSize:11, color:"#9ca3af", background:"none", border:"none", cursor:"pointer" }}>reset</button>
               </div>
             ))}
+            <p style={{ margin:"4px 0 0", fontSize:11, color:"var(--color-text-tertiary)", lineHeight:1.4 }}>Calories follow your protein/carbs/fat targets unless you type a custom calorie goal.</p>
           </div>
           <div style={{ background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", padding:"1rem", marginBottom:12 }}>
             <p style={{ margin:"0 0 8px", fontWeight:500, fontSize:14 }}>Beta build</p>
