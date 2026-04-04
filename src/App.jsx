@@ -15,9 +15,9 @@ const sc = s => GRAD[Math.max(1, Math.min(10, Math.round(s)))];
 const SCORE_BANDS = [
   { min: 9, label: "Excellent choice", cue: "Nutrient-dense and easy to repeat" },
   { min: 7, label: "Solid choice", cue: "Good default for most days" },
-  { min: 5, label: "Middle ground", cue: "Okay sometimes, worth improving" },
-  { min: 3, label: "Think twice", cue: "Likely to work against your goals" },
-  { min: 0, label: "Rarely worth it", cue: "Best kept occasional" },
+  { min: 5, label: "Room to improve", cue: "Not bad, but there is an easy upgrade next time" },
+  { min: 3, label: "Tough fit", cue: "Works against your goals, but you can step it up gradually" },
+  { min: 0, label: "Occasional choice", cue: "Keep the score honest, then focus on the closest better swap" },
 ];
 
 const scoreBand = score => SCORE_BANDS.find(b => score >= b.min) || SCORE_BANDS[SCORE_BANDS.length - 1];
@@ -72,7 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = [];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.12";
+const APP_VERSION = "Beta build 0.1.13";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -99,7 +99,8 @@ SCORE 1-10:
 HARD DEDUCTIONS: Added sugar/HFCS/aliases(maltodextrin,dextrose,barley malt,rice syrup,cane juice,agave,corn syrup solids):-1.5to-3. Seed oils(canola,soybean,sunflower,corn,cottonseed,grapeseed):-1.5to-2. Refined grains:-1to-2. Artificial dyes:-1each. Artificial sweeteners(aspartame,sucralose,ace-K):-1to-1.5. Preservatives(BHA,BHT,TBHQ):-1to-1.5. Trans fats:-3. Gums:-0.2each.
 POSITIVES: grass-fed/wild-caught+0.5, polyphenols+0.25, fermented+0.25, organ meat+0.5.
 If portion note provided adjust macros accordingly.
-For food/meal: {"name":"string","score":number,"category":"whole food"|"minimally processed"|"processed"|"ultraprocessed","macros":{"calories":number,"protein_g":number,"carbs_g":number,"fat_g":number,"fiber_g":number},"flags":[{"ingredient":"string","plain_english":"string","severity":"low"|"medium"|"high","deduction":number}],"positives":["string"],"blood_sugar_note":"string or null","swaps":{"tier1":{"name":"string","why":"smallest realistic upgrade","score":number},"tier2":{"name":"string","why":"better whole-food step","score":number},"tier3":{"name":"string","why":"aspirational best-fit option","score":number}},"tip":"string","has_organ_meat":false,"badge_earned":null}
+SWAPS: stay close to the user's current pattern. If the food is Cheetos-level, do not jump straight to kale or an unrealistic health-food extreme. Tier1 should feel familiar and easy, tier2 should be clearly better but still realistic, tier3 can be aspirational. Meet the user where they are.
+For food/meal: {"name":"string","score":number,"category":"whole food"|"minimally processed"|"processed"|"ultraprocessed","macros":{"calories":number,"protein_g":number,"carbs_g":number,"fat_g":number,"fiber_g":number},"flags":[{"ingredient":"string","plain_english":"string","severity":"low"|"medium"|"high","deduction":number}],"positives":["string"],"blood_sugar_note":"string or null","swaps":{"tier1":{"name":"string","why":"closest realistic upgrade","score":number},"tier2":{"name":"string","why":"clearly better step","score":number},"tier3":{"name":"string","why":"best-fit aspirational option","score":number}},"tip":"string","has_organ_meat":false,"badge_earned":null}
 Supplement timing (Masterjohn first). Zinc alone. PS at bedtime. Mag glycinate bedtime. Fat-soluble with fat. B vitamins morning.
 {"type":"supplement_timing","schedule":[{"time":"string","items":["string"],"notes":"string"}]}
 Supplement Q&A: {"type":"supp_qa","answer":"string","sources":["string"]}
@@ -163,7 +164,7 @@ function ResultPanel({ data, onClose, onStar, isFav }) {
   const col = sc(data.score);
   const band = scoreBand(data.score);
   const TIER_COLORS = [["#fef9c3","#854d0e"],["#dcfce7","#166534"],["#dbeafe","#1e40af"]];
-  const TIER_LABELS = ["Better","Great","Optimal"];
+  const TIER_LABELS = ["Closest","Better","Best fit"];
   return (
     <div style={{ background:"var(--color-background-primary)", borderRadius:14, border:`1.5px solid ${col}44`, padding:"1.25rem", marginBottom:"1rem", position:"relative" }}>
       <div style={{ position:"absolute", top:10, right:38, display:"flex", gap:8 }}>
@@ -318,6 +319,8 @@ export default function App() {
   const fTgt = parseInt(profile.fiberTarget) || 35;
 
   // Override with custom targets if set
+  const tPlo = profile.customTargets?.proteinMin || pLo;
+  const tPhi = profile.customTargets?.proteinMax || pHi;
   const tCal = profile.customTargets?.cal || calTarget;
   const tCarb = profile.customTargets?.carb || carbTarget;
   const tFat = profile.customTargets?.fat || fatTarget;
@@ -330,7 +333,7 @@ export default function App() {
 
   const heightDisplay = profile.feet ? `${profile.feet}'${profile.inches||0}"` : "";
   const recentFoods = [...new Map(history.slice(0,20).map(h => [h.result.name, h])).values()].slice(0, 6);
-  const dailySummary = () => !daily.meals.length ? "No meals logged yet today." : daily.meals.map(m => `${m.slot}: ${m.label} (${Math.round(m.macros?.calories||0)} cal, ${Math.round(m.macros?.protein_g||0)}g protein, ${Math.round(m.macros?.fiber_g||0)}g fiber)`).join("; ");
+  const dailySummary = () => !daily.meals.length ? "No meals logged yet today." : daily.meals.map(m => `${m.label} (${Math.round(m.macros?.calories||0)} cal, ${Math.round(m.macros?.protein_g||0)}g protein, ${Math.round(m.macros?.fiber_g||0)}g fiber)`).join("; ");
 
   // Streak update
   function updateStreak() {
@@ -353,7 +356,7 @@ export default function App() {
     if (streakData.current >= 2) toAdd.push("streak3");
     if (streakData.current >= 6) toAdd.push("streak7");
     if (streakData.current >= 29) toAdd.push("streak30");
-    if (newTot && newTot.pro >= pLo) toAdd.push("protein_pro");
+    if (newTot && newTot.pro >= tPlo) toAdd.push("protein_pro");
     if (newTot && newTot.fib >= fTgt) toAdd.push("fiber_king");
     if (isKeto && newTot && newTot.carb <= tCarb) toAdd.push("keto_clutch");
     setBadges(b => { const set = new Set(b); toAdd.forEach(x => set.add(x)); return [...set]; });
@@ -701,7 +704,7 @@ export default function App() {
                 <p style={{ margin:"0 0 4px", fontSize:12, color:"#166534", fontWeight:600, letterSpacing:"0.04em", textTransform:"uppercase" }}>{profile.userMode || "Quick guidance"}</p>
                 <h2 style={{ margin:"0 0 6px", fontSize:22, lineHeight:1.15 }}>What are you eating right now?</h2>
                 <p style={{ margin:0, fontSize:13, color:"var(--color-text-secondary)", lineHeight:1.45 }}>
-                  {isSimpleMode ? "Snap it, say it, or scan it. We'll keep the feedback simple and useful." : "Capture meals fast, then dig into details only when you want them."}
+                  {isSimpleMode ? "Snap it or say it. We'll keep the feedback simple and useful." : "Capture meals fast, then dig into details only when you want them."}
                 </p>
               </div>
               <div style={{ minWidth:76 }}>
@@ -710,7 +713,7 @@ export default function App() {
             </div>
 
             <div style={{ display:"grid", gridTemplateColumns:`repeat(${isFullTracking ? 5 : isAdvanced ? 3 : 2},1fr)`, gap:6, marginBottom:10 }}>
-              <MacroTile label="protein today" value={Math.round(tot.pro)} unit="g" color={tot.pro>=pLo&&pLo>0?sc(9):null}/>
+              <MacroTile label="protein today" value={Math.round(tot.pro)} unit="g" color={tot.pro>=tPlo&&tPlo>0?sc(9):null}/>
               <MacroTile label={wantsBloodSugar ? "fiber / buffer" : "fiber today"} value={Math.round(tot.fib)} unit="g" color={tot.fib>=fTgt?sc(9):null}/>
               {isAdvanced && <MacroTile label="calories" value={Math.round(tot.cal)} unit="" color={null}/>}
               {isFullTracking && <MacroTile label="carbs" value={Math.round(tot.carb)} unit="g" color={null}/>}
@@ -719,7 +722,7 @@ export default function App() {
           </div>
 
           <div style={{ marginBottom:"0.85rem" }}>
-            <ProgressBar label="Protein" value={Math.round(tot.pro)} low={pLo} high={pHi} unit="g" overshootMode="good" compact/>
+            <ProgressBar label="Protein" value={Math.round(tot.pro)} low={tPlo} high={tPhi} unit="g" overshootMode="good" compact/>
             <ProgressBar label="Fiber" value={Math.round(tot.fib)} low={fTgt} unit="g" overshootMode="good" compact/>
             {isAdvanced && <ProgressBar label="Calories" value={Math.round(tot.cal)} low={tCal} unit="" overshootMode={isLoss?"warn":"neutral"} compact/>}
             {isFullTracking && <ProgressBar label="Carbs" value={Math.round(tot.carb)} low={tCarb} unit="g" overshootMode={isKeto?"warn":"neutral"} compact/>}
@@ -1108,7 +1111,18 @@ export default function App() {
               <p style={{ margin:"0 0 6px", fontSize:11, color:"var(--color-text-secondary)" }}>Tracking level</p>
               {TRACKING_LEVELS.map(opt => <button key={opt} onClick={()=>setProfile(p=>({...p,trackingLevel:opt}))} style={{ display:"block", width:"100%", textAlign:"left", padding:"9px 12px", marginBottom:6, borderRadius:10, cursor:"pointer", fontSize:13, border:profile.trackingLevel===opt?"2px solid #16a34a":"0.5px solid var(--color-border-secondary)", background:profile.trackingLevel===opt?"#f0fdf4":"var(--color-background-primary)", color:"var(--color-text-primary)" }}>{opt}</button>)}
             </div>
-            {pHi > 0 && <div style={{ padding:"9px 12px", background:"#f0fdf4", borderRadius:8, border:"0.5px solid #86efac" }}><p style={{ margin:0, fontSize:12, color:"#166534", lineHeight:1.5 }}>Protein: <strong>{pLo}–{pHi}g/day</strong> · TDEE: <strong>~{calcTDEE(parseFloat(profile.weight)||0, profile.activityLevel)} cal</strong><br/><span style={{ fontSize:10 }}>{isMuscle?"1–1.6× lean body mass":"0.7–1.0× body weight"}</span></p></div>}
+            {pHi > 0 && <div style={{ padding:"9px 12px", background:"#f0fdf4", borderRadius:8, border:"0.5px solid #86efac" }}><p style={{ margin:0, fontSize:12, color:"#166534", lineHeight:1.5 }}>Protein: <strong>{tPlo}–{tPhi}g/day</strong> · TDEE: <strong>~{calcTDEE(parseFloat(profile.weight)||0, profile.activityLevel)} cal</strong><br/><span style={{ fontSize:10 }}>{isMuscle?"1–1.6× lean body mass":"0.7–1.0× body weight"}</span></p></div>}
+          </div>
+          <div style={{ background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", padding:"1rem", marginBottom:12 }}>
+            <p style={{ margin:"0 0 8px", fontWeight:500, fontSize:14 }}>Custom targets</p>
+            <p style={{ margin:"0 0 10px", fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.45 }}>If the default estimates feel off for you, tighten them here so your daily bars match how you actually want to eat.</p>
+            {[["Protein minimum (g)","proteinMin",tPlo],["Protein upper range (g)","proteinMax",tPhi],["Calories","cal",tCal],["Carbs (g)","carb",tCarb],["Fat (g)","fat",tFat]].filter(([,key]) => key.startsWith("protein") || key==="cal" ? true : isFullTracking).map(([label,key,val]) => (
+              <div key={key} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <span style={{ fontSize:12, color:"var(--color-text-secondary)", width:140, flexShrink:0 }}>{label}</span>
+                <input type="number" value={profile.customTargets?.[key] ?? val} onChange={e=>setProfile(p=>({...p,customTargets:{...p.customTargets,[key]:parseInt(e.target.value)||undefined}}))} style={{ flex:1, fontSize:13, borderRadius:8, padding:"6px 10px", boxSizing:"border-box" }}/>
+                <button onClick={()=>setProfile(p=>({...p,customTargets:{...p.customTargets,[key]:undefined}}))} style={{ fontSize:11, color:"#9ca3af", background:"none", border:"none", cursor:"pointer" }}>reset</button>
+              </div>
+            ))}
           </div>
           <div style={{ background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", padding:"1rem", marginBottom:12 }}>
             <p style={{ margin:"0 0 8px", fontWeight:500, fontSize:14 }}>Beta build</p>
@@ -1119,7 +1133,10 @@ export default function App() {
           <div style={{ background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", padding:"1rem" }}>
             <p style={{ margin:"0 0 8px", fontWeight:500, fontSize:14 }}>Data</p>
             <p style={{ margin:"0 0 10px", fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.4 }}>Your data is stored locally in this browser. Clearing browser data will erase it. Export a backup anytime.</p>
-            <button onClick={()=>{ const data = { profile, history, favorites, badges, streakData, weightLog, daily }; const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="nourishrx_backup.json"; a.click(); }} style={{ padding:"9px 16px", borderRadius:10, background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", fontSize:13, cursor:"pointer", color:"var(--color-text-primary)" }}>Export data (JSON)</button>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              <button onClick={()=>{ const data = { profile, history, favorites, badges, streakData, weightLog, daily }; const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="nourishrx_backup.json"; a.click(); }} style={{ padding:"9px 16px", borderRadius:10, background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", fontSize:13, cursor:"pointer", color:"var(--color-text-primary)" }}>Export data (JSON)</button>
+              <button onClick={()=>{ const nextProfile = { name:"", age:"", sex:"", weight:"", feet:"", inches:"", userMode:"", goals:[], activityLevel:"", dietStyle:"", challenges:[], careAbout:[], coachStyle:"Gentle nudges only", medications:"", trackingLevel:"Basic — just protein & fiber", fiberTarget:35, customTargets:{} }; setProfile(nextProfile); setScreen("onboard"); setStep(0); }} style={{ padding:"9px 16px", borderRadius:10, background:"#fff7ed", border:"0.5px solid #fdba74", fontSize:13, cursor:"pointer", color:"#9a3412" }}>Redo onboarding</button>
+            </div>
           </div>
         </div>
       )}
