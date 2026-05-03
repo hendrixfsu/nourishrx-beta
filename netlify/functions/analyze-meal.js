@@ -15,9 +15,7 @@ function getClientIp(event) {
     event.headers?.["X-Nf-Client-Connection-Ip"] ||
     event.headers?.["x-forwarded-for"] ||
     event.headers?.["X-Forwarded-For"];
-
   if (header) return String(header).split(",")[0].trim() || "unknown";
-
   const requestContextIp = event.requestContext?.identity?.sourceIp;
   return requestContextIp || "unknown";
 }
@@ -64,10 +62,21 @@ function validatePayload(payload) {
   if (!payload || typeof payload !== "object") return "Invalid JSON body.";
   const { system, content } = payload;
   if (typeof system !== "string" || !system.trim()) return "Missing required field: system.";
-  if (typeof content !== "string" || !content.trim()) return "Missing required field: content.";
   if (system.length > 12000) return "System prompt is too long.";
-  if (content.length > 32000) return "Content payload is too long.";
-  return null;
+
+  if (typeof content === "string") {
+    if (!content.trim()) return "Missing required field: content.";
+    if (content.length > 32000) return "Content payload is too long.";
+    return null;
+  }
+
+  if (Array.isArray(content)) {
+    if (content.length === 0) return "Missing required field: content.";
+    if (content.length > 16) return "Content payload has too many parts.";
+    return null;
+  }
+
+  return "Missing required field: content.";
 }
 
 export async function handler(event) {
