@@ -703,7 +703,7 @@ export default function App() {
   );
 
   // ─── Main App UI ─────────────────────────────────────────────────────────
-  const SCREENS = [["home","Meal Check"]];
+  const SCREENS = [["home","Meal Check"],["tracker","Trends"],["rewards","Streaks"]];
 
   return (
     <div style={{ maxWidth:520, margin:"0 auto", padding:"1rem" }}>
@@ -1187,3 +1187,4 @@ export default function App() {
     </div>
   );
 }
+
