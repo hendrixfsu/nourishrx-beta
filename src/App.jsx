@@ -72,7 +72,7 @@ const DIET = ["No restrictions / standard American","Mostly whole foods","Paleo 
 const CHAL = ["Sugar cravings","Processed food habits","Skipping meals","Not enough protein","Overeating","Undereating / loss of appetite","No time to cook","Eating out most meals","None really"];
 const SLOTS = [];
 const TRACKING_LEVELS = ["Basic — just protein & fiber","Moderate — add calories","Full — calories, carbs & fat"];
-const APP_VERSION = "Beta build 0.1.15";
+const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "Beta build local";
 
 const BADGE_DEFS = [
   { id:"streak3", icon:"🔥", name:"3-Day Streak", desc:"Logged 3 days in a row" },
@@ -1009,9 +1009,13 @@ export default function App() {
 
           {/* Weekly score */}
           {history.length > 0 && (() => {
-            const week = history.filter(h => { const d = new Date(h.date); const now = new Date(); return (now-d)/(1000*60*60*24) < 7; });
-            const avg = week.length ? (week.reduce((a,h)=>a+h.result.score,0)/week.length).toFixed(1) : null;
-            const proHit = week.filter(h => h.result.macros?.protein_g >= pLo/week.length).length;
+            const week = history.filter(h => {
+              const d = new Date(h?.date);
+              const now = new Date();
+              return h?.result && !Number.isNaN(d.getTime()) && (now - d) / (1000 * 60 * 60 * 24) < 7;
+            });
+            const avg = week.length ? (week.reduce((a,h)=>a+(h.result?.score||0),0)/week.length).toFixed(1) : null;
+            const proHit = week.length ? week.filter(h => (h.result?.macros?.protein_g || 0) >= pLo / week.length).length : 0;
             return avg ? (
               <div style={{ background:"var(--color-background-primary)", borderRadius:12, border:"0.5px solid var(--color-border-secondary)", padding:"1rem", marginBottom:14 }}>
                 <p style={{ margin:"0 0 10px", fontWeight:500, fontSize:14 }}>This week</p>
@@ -1187,4 +1191,5 @@ export default function App() {
     </div>
   );
 }
+
 
